@@ -12,6 +12,12 @@ sys.path.append('lib/')
 from lib.utils import set_seed, dist_setup, get_conf
 import lib.trainers as trainers
 
+import numpy as np
+
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# print("Total CUDA devices: ", torch.cuda.device_count())
+
 
 def main():
 
@@ -63,17 +69,63 @@ def main_worker(gpu, args):
                         id=args.wandb_id,
                         resume='allow',
                         dir=args.output_dir)
+        wandb.define_metric("custom_step")
 
-    # create model
-    trainer.build_model()
-    # create optimizer
-    trainer.build_optimizer()
-    # resume training
-    if args.resume:
-        trainer.resume()
-    trainer.build_dataloader()
+    if args.fivefolds:
+        fivefolds_test_loss = []
+        fivefolds_test_accuracy = []
+        fivefolds_test_bal_accuracy = []
+        fivefold_test_precision = []
+        fivefold_test_recall = []
+        fivefold_test_f1 = []
 
-    trainer.run()
+        for f in range(1,6):
+            args.fold = f
+
+            if args.rank == 0 and not args.disable_wandb:
+                # define which metrics will be plotted against it
+                wandb.define_metric(f"Fold {f} - lr", step_metric="custom_step")
+                wandb.define_metric(f"Fold {f} - Training Loss", step_metric="custom_step")
+                wandb.define_metric(f"Fold {f} - Validation Loss", step_metric="custom_step")
+
+            trainer = trainer_class(args)
+            
+            # create model
+            trainer.build_model()
+            # create optimizer
+            trainer.build_optimizer()
+            # resume training
+            if args.resume:
+                trainer.resume()
+            trainer.build_dataloader()
+
+            test_loss, accuracy, bal_acc, precision, recall, f1 = trainer.run()
+        
+            fivefolds_test_loss.append(test_loss)
+            fivefolds_test_accuracy.append(accuracy)
+            fivefolds_test_bal_accuracy.append(bal_acc)
+            fivefold_test_precision.append(precision)
+            fivefold_test_recall.append(recall)
+            fivefold_test_f1.append(f1)
+
+        print(f"Average Test Loss: {np.mean(fivefolds_test_loss)}, std: {np.std(fivefolds_test_loss)}")
+        print(f"Average Test Accuracy: {np.mean(fivefolds_test_accuracy)}, std: {np.std(fivefolds_test_accuracy)}")
+        print(f"Average Test Balanced Accuracy: {np.mean(fivefolds_test_bal_accuracy)}, std: {np.std(fivefolds_test_bal_accuracy)}")
+        print(f"Average Test Precision: {np.mean(fivefold_test_precision)}, std: {np.std(fivefold_test_precision)}")
+        print(f"Average Test Recall: {np.mean(fivefold_test_recall)}, std: {np.std(fivefold_test_recall)}")
+        print(f"Average Test F1: {np.mean(fivefold_test_f1)}, std: {np.std(fivefold_test_f1)}")
+
+    else: 
+        # create model
+        trainer.build_model()
+        # create optimizer
+        trainer.build_optimizer()
+        # resume training
+        if args.resume:
+            trainer.resume()
+        trainer.build_dataloader()
+
+        trainer.run()
 
     if args.rank == 0 and not args.disable_wandb:
         run.finish()

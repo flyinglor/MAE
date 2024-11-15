@@ -13,7 +13,10 @@ __all__ = [
     'MAEViTEncoder', 
     'MAEViTDecoder',
     'mae_encoder_small_patch16_224',
-    'mae_decoder_small_patch16_224'
+    'mae_decoder_small_patch16_224',
+    'mae_encoder_large',
+    'mae_encoder_huge',
+    'mae_decoder_large'
 ]
 
 def build_2d_sincos_position_embedding(grid_size, embed_dim, num_tokens=1, temperature=10000.):
@@ -112,10 +115,14 @@ class MAEViTEncoder(nn.Module):
 
         x = self.patch_embed(x) # [B*L, embed_dim]
         x = x.reshape(B, L, embed_dim)
+        # print("---------forward feature--------")
+        # print("x.reshape(B, L, embed_dim): ", x.shape)
         if return_patchembed:
             patchembed = x
         cls_token = self.cls_token.expand(B, -1, -1)
         x = torch.cat((cls_token, x), dim=1)
+        # print("x = torch.cat((cls_token, x), dim=1): ", x.shape)
+        # print("pos_embed: ", pos_embed.shape)
 
         if self.use_pe:
             if x.size(1) != pos_embed.size(1):
@@ -209,5 +216,29 @@ def mae_decoder_small_patch16_224(**kwargs):
         embed_dim=128, 
         depth=4,
         num_heads=3,
+        **kwargs)
+    return model
+
+def mae_encoder_large(**kwargs):
+    model = MAEViTEncoder(
+        embed_dim=1056, 
+        depth=24,
+        num_heads=16,
+        **kwargs)
+    return model
+
+def mae_decoder_large(**kwargs):
+    model = MAEViTDecoder(
+        embed_dim=512, 
+        depth=8,
+        num_heads=12,
+        **kwargs)
+    return model
+
+def mae_encoder_huge(**kwargs):
+    model = MAEViTEncoder(
+        embed_dim=1280,
+        depth=32,
+        num_heads=16,
         **kwargs)
     return model

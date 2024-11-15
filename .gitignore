@@ -126,3 +126,11 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+
+# Ignore all folders starting with 'mae3d'
+mae3d*/
+
+pretrained_weights/
+
+scripts/

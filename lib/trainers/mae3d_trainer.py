@@ -40,6 +40,7 @@ class MAE3DTrainer(BaseTrainer):
                             decoder=getattr(networks, args.dec_arch), 
                             args=args)
             self.wrap_model()
+            print(self.model)
         elif self.model_name == 'Unknown':
             raise ValueError("=> Model name is still unknown")
         else:
@@ -63,7 +64,7 @@ class MAE3DTrainer(BaseTrainer):
             print("=> creating dataloader")
             args = self.args
 
-            if args.dataset in ['btcv', 'msd_brats']:
+            if args.dataset in ['btcv', 'msd_brats', 'adni', 'ukb']:
                 train_transform = get_mae_pretrain_transforms(args)
                 self.dataloader = get_train_loader(args, 
                                                    batch_size=self.batch_size,
@@ -88,6 +89,7 @@ class MAE3DTrainer(BaseTrainer):
     
     def run(self):
         args = self.args
+        self.best_validation_loss = 1000
         # Compute iterations when resuming
         niters = args.start_epoch * self.iters_per_epoch
 
@@ -106,7 +108,7 @@ class MAE3DTrainer(BaseTrainer):
 
             if epoch == 0 or (epoch + 1) % args.vis_freq == 0:
                 print(f"=> start visualizing after {epoch + 1} epochs")
-                self.vis_reconstruction(niters)
+                self.vis_reconstruction(niters, epoch=epoch)
                 print("=> finish visualizing")
 
             if not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank == 0):
@@ -138,7 +140,11 @@ class MAE3DTrainer(BaseTrainer):
             self.adjust_learning_rate(epoch + i / self.iters_per_epoch, args)
 
             # For SSL pretraining, only image data is required for training
-            image = batch_data['image']
+            if args.dataset in ['ukb','adni']:
+                image = batch_data[0]
+                # print(image.shape)
+            else:
+                image = batch_data['image']
 
             if args.gpu is not None:
                 image = image.cuda(args.gpu, non_blocking=True)
@@ -172,7 +178,7 @@ class MAE3DTrainer(BaseTrainer):
                     wandb.log(
                         {
                         "lr": optimizer.param_groups[0]['lr'],
-                        "Loss": loss.item(),
+                        "Train Loss": loss.item(),
                         },
                         step=niters,
                     )
@@ -181,7 +187,7 @@ class MAE3DTrainer(BaseTrainer):
             load_start_time = time.time()
         return niters
 
-    def vis_reconstruction(self, niters=0):
+    def vis_reconstruction(self, niters=0, epoch=0):
         args = self.args
         loader = self.val_dataloader
         model = self.wrapped_model
@@ -189,12 +195,16 @@ class MAE3DTrainer(BaseTrainer):
         model.eval()
 
         for batch_data in loader:
-            image = batch_data['image']
+            if args.dataset in ['ukb','adni']:
+                image = batch_data[0]
+            else:
+                image = batch_data['image']
             if args.gpu is not None:
                 image = image.cuda(args.gpu, non_blocking=True)
 
             # compute output and loss
-            _, x, recon, masked_x = model(image, return_image=True)
+            loss, x, recon, masked_x = model(image, return_image=True)
+
 
             vis_tensor = torch.cat([x, masked_x, recon], dim=0)
 
@@ -217,10 +227,24 @@ class MAE3DTrainer(BaseTrainer):
                 {
                 "vis_hw": vis_grid_hw,
                 # "vis_hd": vis_grid_hd,
-                # "vis_wd": vis_grid_wd
+                # "vis_wd": vis_grid_wd,
+                "Validation Loss": loss.item(),
                 },
                 step=niters,
             )
+
+            # Check if the current validation loss is the lowest
+            if loss.item() < self.best_validation_loss:
+                self.best_validation_loss = loss.item()
+                print(f"=> start saving the current best checkpoint")
+                self.save_checkpoint({
+                    'epoch': epoch + 1,
+                    'arch': args.arch,
+                    'state_dict': self.model.state_dict(),
+                    'optimizer' : self.optimizer.state_dict(),
+                    'scaler': self.scaler.state_dict(), # additional line compared with base imple
+                }, is_best=False, filename=f'{args.ckpt_dir}/best_checkpoint.pth.tar')
+                print("=> finish saving checkpoint")
             break
         print("finish wandb logging")
 

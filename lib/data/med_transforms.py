@@ -2,6 +2,7 @@ from re import L
 import numpy as np
 from monai import transforms
 from torch import scalar_tensor, zero_
+import torchio as tio
 
 class ConvertToMultiChannelBasedOnBratsClassesd(transforms.MapTransform):
     """
@@ -187,6 +188,14 @@ def get_mae_pretrain_transforms(args):
                 transforms.ToTensord(keys=["image", "label"])
             ]
         )
+    elif args.dataset in ['adni','ukb']:
+        train_transform = tio.Compose(
+            [
+                tio.RescaleIntensity(out_min_max=(0, 1)),
+                tio.CropOrPad((128, 128, 128)),
+                # tio.Resize((64, 80, 64)),
+            ]
+        )
     else:
         raise ValueError(f"Only support BTCV transforms for medical images")
     return train_transform
@@ -225,6 +234,22 @@ def get_val_transforms(args):
                 transforms.CropForegroundd(keys=["image", "label"], source_key="image"),
                 transforms.NormalizeIntensityd(keys="image", nonzero=True, channel_wise=True),
                 transforms.ToTensord(keys=["image", "label"])
+            ]
+        )
+    elif args.dataset in ['adni','ukb']:
+        val_transform = tio.Compose(
+            [
+                tio.RescaleIntensity(out_min_max=(0, 1)),
+                tio.CropOrPad((128, 128, 128)),
+                # tio.Resize((64, 80, 64)),
+            ]
+        )
+    elif args.dataset in ['hospital','dzne']:
+        val_transform = tio.Compose(
+            [
+                tio.RescaleIntensity(out_min_max=(0, 1)),
+                tio.CropOrPad((128, 128, 128)),
+                # tio.Resize((64, 80, 64)),
             ]
         )
     else:
@@ -296,6 +321,22 @@ def get_vis_transforms(args):
                 transforms.ToTensord(keys=["image", "label"])
             ]
         )
+    elif args.dataset in ['adni','ukb']:
+        val_transform = tio.Compose(
+            [
+                tio.RescaleIntensity(out_min_max=(0, 1)),
+                tio.CropOrPad((128, 128, 128)),
+                # tio.Resize((64, 80, 64)),
+            ]
+        )
+    elif args.dataset in ['hospital','dzne']:
+        val_transform = tio.Compose(
+            [
+                tio.RescaleIntensity(out_min_max=(0, 1)),
+                tio.CropOrPad((128, 128, 128)),
+                # tio.Resize((64, 80, 64)),
+            ]
+        )
     else:
         raise ValueError(f"Only support BTCV transforms for medical images")
     return val_transform
@@ -333,6 +374,22 @@ def get_raw_transforms(args):
                                     pixdim=(1.0, 1.0, 1.0),
                                     mode=("bilinear", "nearest")),
                 transforms.ToTensord(keys=["image", "label"])
+            ]
+        )
+    elif args.dataset in ['adni','ukb']:
+        val_transform = tio.Compose(
+            [
+                tio.RescaleIntensity(out_min_max=(0, 1)),
+                tio.CropOrPad((128, 128, 128)),
+                # tio.Resize((64, 80, 64)),
+            ]
+        )
+    elif args.dataset in ['hospital','dzne']:
+        val_transform = tio.Compose(
+            [
+                tio.RescaleIntensity(out_min_max=(0, 1)),
+                tio.CropOrPad((128, 128, 128)),
+                # tio.Resize((64, 80, 64)),
             ]
         )
     else:
