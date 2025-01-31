@@ -11,6 +11,7 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 import torch.nn.functional as F
+import torch.nn as nn
 
 import sys
 sys.path.append('..')
@@ -96,9 +97,10 @@ class ClsTrainer(BaseTrainer):
             #                             smooth_dr=args.smooth_dr)
             if args.dataset in ['hospital','dzne']:
                 args.num_classes = 3
-                self.loss_fn = DiceCELoss(to_onehot_y=True,
-                                          softmax=False,
-                                          squared_pred=False)
+                self.loss_fn = nn.CrossEntropyLoss()
+                # self.loss_fn = DiceCELoss(to_onehot_y=True,
+                #                           softmax=False,
+                #                           squared_pred=False)
             else:
                 raise ValueError(f"Unsupported dataset {args.dataset}")
             
@@ -136,7 +138,7 @@ class ClsTrainer(BaseTrainer):
                 # pdb.set_trace()
 
                 #TODO: load state dict, encoder
-                if self.model_name == 'MAE3DFINETUNE':
+                if self.model_name in ['MAE3DFINETUNE', 'MAEwithAttentiveProbing']:
                     #TODO: can i load the whole model like this or i need to just load the encoder?
                     # msg = self.model.load_state_dict(state_dict, strict=False)
                     #delete decoder
@@ -195,9 +197,12 @@ class ClsTrainer(BaseTrainer):
 
         # optim_params = self.group_params(model)
         #TODO: only finetuning encoder????
-        optim_params = self.get_parameter_groups(get_layer_id=partial(assigner.get_layer_id, prefix='encoder.'), 
-                                                 get_layer_scale=assigner.get_scale, 
-                                                 verbose=True)
+        optim_params = self.get_parameter_groups(get_layer_id=partial(assigner.get_layer_id), 
+                                                get_layer_scale=assigner.get_scale, 
+                                                verbose=True)
+        # optim_params = self.get_parameter_groups(get_layer_id=partial(assigner.get_layer_id, prefix='encoder.'), 
+        #                                          get_layer_scale=assigner.get_scale, 
+        #                                          verbose=True)
         # TODO: create optimizer factory
         self.optimizer = torch.optim.AdamW(optim_params, 
                                             lr=args.lr,
@@ -278,20 +283,20 @@ class ClsTrainer(BaseTrainer):
                 if metric < best_metric:
                     print(f"=> New val best metric: {metric} | Old val best metric: {best_metric}!")
                     best_metric = metric
-                    if not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank == 0):
-                        self.save_checkpoint(
-                            {
-                                'epoch': epoch + 1,
-                                'arch': args.arch,
-                                'state_dict': self.model.state_dict(),
-                                'optimizer' : self.optimizer.state_dict(),
-                                'scaler': self.scaler.state_dict(), # additional line compared with base imple
-                                'metric':metric
-                            }, 
-                            is_best=False, 
-                            filename=f'{args.ckpt_dir}/best_model.pth.tar'
-                        )
-                        print("=> Finish saving best model.")
+                    # if not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank == 0):
+                    #     self.save_checkpoint(
+                    #         {
+                    #             'epoch': epoch + 1,
+                    #             'arch': args.arch,
+                    #             'state_dict': self.model.state_dict(),
+                    #             'optimizer' : self.optimizer.state_dict(),
+                    #             'scaler': self.scaler.state_dict(), # additional line compared with base imple
+                    #             'metric':metric
+                    #         }, 
+                    #         is_best=False, 
+                    #         filename=f'{args.ckpt_dir}/best_model.pth.tar'
+                    #     )
+                    #     print("=> Finish saving best model.")
                 else:
                     print(f"=> Still old val best metric: {best_metric}")
 
@@ -404,9 +409,10 @@ class ClsTrainer(BaseTrainer):
 
     @staticmethod
     def train_class_batch(model, samples, target, criterion):
+        # outputs = model(samples)
         outputs = F.softmax(model(samples), dim=1)
         #change to cross entropy loss
-        loss = criterion.ce(outputs, target)
+        loss = criterion(outputs, target)
         return loss
 
     @torch.no_grad()
@@ -435,8 +441,9 @@ class ClsTrainer(BaseTrainer):
                 target = target.to(args.gpu, non_blocking=True)
 
             # get the validation loss
+            # outputs = model(image)
             outputs = F.softmax(model(image), dim=1)
-            loss = self.loss_fn.ce(outputs, target)
+            loss = self.loss_fn(outputs, target)
             #TODO: need .item()?
             valid_losses.append(loss.item())
 
@@ -491,9 +498,10 @@ class ClsTrainer(BaseTrainer):
 
             # get the validation loss
             outputs = F.softmax(model(image), dim=1)
+            # outputs = model(image)
             predictions.extend(torch.argmax(outputs, dim=1).tolist())
             label_test.extend(torch.argmax(target, dim=1).tolist())  # Accumulate true labels
-            loss = self.loss_fn.ce(outputs, target)
+            loss = self.loss_fn(outputs, target)
             #TODO: need .item()?
             valid_losses.append(loss.item())
 
@@ -524,6 +532,8 @@ class ClsTrainer(BaseTrainer):
         log_string += f"===> Precision: {precision:.05f} \n "
         log_string += f"===> Recall: {recall:.05f} \n "
         log_string += f"===> F1-score: {f1:.05f} \n "
+        log_string += f"===> Predictions: {predictions} \n "
+        log_string += f"===> Labels: {label_test} \n "
 
         print(log_string)
 

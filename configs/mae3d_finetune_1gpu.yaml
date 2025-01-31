@@ -4,7 +4,8 @@ enc_arch: MAEViTEncoder
 dec_arch: MAEViTDecoder
 
 # wandb
-proj_name: MAE3DFINETUNE
+# proj_name: MAE3DFINETUNE
+proj_name: MAEwithAttentiveProbing
 run_name: ${proj_name}_${arch}_${dataset}
 wandb_id:
 

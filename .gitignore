@@ -130,6 +130,7 @@ dmypy.json
 
 # Ignore all folders starting with 'mae3d'
 mae3d*/
+encoder*/
 
 pretrained_weights/
 
